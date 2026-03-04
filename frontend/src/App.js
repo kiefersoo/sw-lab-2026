@@ -1,11 +1,16 @@
 import React from 'react';
-import SignIn from './SignIn';
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import SignIn from "./SignIn";
+import CreateUser from "./CreateUser";
 
 function App() {
   return (
-    <div className="App">
-      <SignIn />
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<SignIn />} />
+        <Route path="/create-user" element={<CreateUser />} />
+      </Routes>
+    </Router>
   );
 }
 
