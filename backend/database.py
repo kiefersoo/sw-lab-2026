@@ -25,14 +25,21 @@ def access_projects(db):
     projects = db["projects"]
     return projects
 
+def access_hardware_db(cluster):
+    db = cluster["hardware_database"]
+    return db
+
+def access_hardware(db):
+    hardware = db["hardware_collection"]
+    return hardware
+
 def main():
     cluster = setup_database()
-    db = access_db(cluster)
-    users = access_users(db)
-    users.insert_one({
-    "username": "alskdjlkajsd",
-    "password": "WiiSports"
-    })    
+    hardware_db = access_hardware_db(cluster)
+    hardware = access_hardware(hardware_db)
+    hardware.insert_one({"hardware_set": "hwset1", "capacity": 7, "availability": 5})
+    
+        
 
 
 
