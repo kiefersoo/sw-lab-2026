@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Container, Form, Button } from 'react-bootstrap';
 import { useNavigate } from "react-router-dom";
+import { post, setAuth } from "./api";
 
 function SignIn() {
     const [userId, setUserId] = useState('');
@@ -9,31 +10,20 @@ function SignIn() {
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
-        e.preventDefault(); 
-        
-        const creds = {userId, password};
+        e.preventDefault();
 
         try {
-            const response = await fetch("http://localhost:5000/api/signin", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(creds),
-            });
+            const { ok, data } = await post("/api/signin", { userId, password });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                alert(`Welcome, ${data.userId}! Token: ${data.token}`);
-                console.log("Sign in successful:", data);
-                // You could redirect here, e.g., window.location.href = '/dashboard';
+            if (ok) {
+                setAuth(data.userId, data.token);
+                navigate('/projects');
             } else {
-                alert(`Error: ${data.error}`);
+                alert(data.error ? `Error: ${data.error}` : 'Sign in failed');
             }
-        } catch (error) {
-            console.error("Connection error:", error);
-            alert("Could not connect to the Flask server.");
+        } catch (err) {
+            console.error("Connection error:", err);
+            alert("Could not connect to the server.");
         }
     };
 

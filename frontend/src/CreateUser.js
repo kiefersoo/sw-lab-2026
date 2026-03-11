@@ -1,45 +1,34 @@
 import React, { useState } from 'react';
 import { Card, Container, Form, Button } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
+import { post } from './api';
 
 function CreateUser() {
     const [userId, setUserId] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Simple frontend validation
         if (password !== confirmPassword) {
             alert("Passwords do not match!");
             return;
         }
 
-        const newUser = { userId, password };
-
         try {
-            const response = await fetch("http://localhost:5000/api/signup", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(newUser),
-            });
+            const { ok, data } = await post("/api/signup", { userId, password });
 
-            const data = await response.json();
-
-            if (response.ok) {
+            if (ok) {
                 alert("Account created successfully!");
-                console.log("User created:", data);
-
-                // Optional: redirect to sign-in page
-                window.location.href = "/";
+                navigate("/");
             } else {
-                alert(`Error: ${data.error}`);
+                alert(data.error ? `Error: ${data.error}` : 'Signup failed');
             }
-        } catch (error) {
-            console.error("Connection error:", error);
-            alert("Could not connect to the Flask server.");
+        } catch (err) {
+            console.error("Connection error:", err);
+            alert("Could not connect to the server.");
         }
     };
 
@@ -92,7 +81,7 @@ function CreateUser() {
                         <Button
                             variant="link"
                             className="p-0 ms-2"
-                            onClick={() => window.location.href = "/"}
+                            onClick={() => navigate("/")}
                         >
                             Sign In
                         </Button>
