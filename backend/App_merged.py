@@ -98,84 +98,176 @@ def login_project():
         projectID=p_id,
     ), 200
 
-# RESOURCE MANAGEMENT
 
-@app.route("/api/hardware/<project_id>", methods=["GET"])
-def get_hardware(project_id):
-    """Fetches the current hardware status for a given project."""
-    project = projects.find_one({"project_id": project_id})
-    
-    if not project:
+# HARDWARE RESOURCE MANAGEMENT
+hardware_collection = db["hardware"]
+allocations_collection = db["allocations"]
+
+
+# HELPERS
+def parse_request(data):
+    project_id = data.get("projectID")
+    hw = data.get("hardware") or data.get("hwSet")
+    qty = data.get("quantity", data.get("amount", 0))
+
+    try:
+        qty = int(qty)
+    except:
+        return None, None, None, jsonify(error="Quantity must be integer"), 400
+
+    return project_id, hw, qty, None, None
+
+
+def validate_project(project_id):
+    if not project_id:
+        return jsonify(error="Project ID required"), 400
+
+    if not projects.find_one({"project_id": project_id}):
         return jsonify(error="Project not found"), 404
-        
-    hardware = project.get("hardware", {
-        "HWSet1": {"capacity": 100, "available": 100},
-        "HWSet2": {"capacity": 100, "available": 100},
-        "HWSet3": {"capacity": 100, "available": 100},
-        "HWSet4": {"capacity": 100, "available": 100},
-        "HWSet5": {"capacity": 100, "available": 100}
-    })
-    
+
+    return None
+
+
+# STATUS (ALL HARDWARE)
+@app.route("/api/hardware/status", methods=["GET"])
+def hardware_status():
+    hardware = list(hardware_collection.find({}, {"_id": 0}))
     return jsonify(hardware=hardware), 200
 
+
+# REQUEST (CHECK ONLY)
+@app.route("/api/hardware/request", methods=["POST"])
+def request_hardware():
+    data = request.json
+    _, hw, qty, err, code = parse_request(data)
+    if err:
+        return err, code
+
+    hw_doc = hardware_collection.find_one({"name": hw})
+    if not hw_doc:
+        return jsonify(error="Hardware not found"), 404
+
+    if qty <= 0:
+        return jsonify(error="Invalid quantity"), 400
+
+    if hw_doc["available"] >= qty:
+        return jsonify(
+            message="Available",
+            requested=qty,
+            available=hw_doc["available"]
+        ), 200
+
+    return jsonify(
+        error="Not enough hardware",
+        available=hw_doc["available"]
+    ), 409
+
+
+# CHECKOUT
 @app.route("/api/hardware/checkout", methods=["POST"])
 def checkout_hardware():
     data = request.json
-    p_id = data.get("projectID")
-    hw_set = data.get("hwSet")
-    amount = int(data.get("amount", 0))
+    project_id, hw, qty, err, code = parse_request(data)
+    if err:
+        return err, code
 
-    if amount <= 0:
-        return jsonify(error="Amount must be greater than 0"), 400
+    proj_check = validate_project(project_id)
+    if proj_check:
+        return proj_check
 
-    #check current availability
-    project = projects.find_one({"project_id": p_id})
-    if not project:
-        return jsonify(error="Project not found"), 404
+    if qty <= 0:
+        return jsonify(error="Invalid quantity"), 400
 
-    #current available amount
-    current_available = project.get("hardware", {}).get(hw_set, {}).get("available", 100)
+    hw_doc = hardware_collection.find_one({"name": hw})
+    if not hw_doc:
+        return jsonify(error="Hardware not found"), 404
 
-    if amount > current_available:
-        return jsonify(error=f"Not enough {hw_set} available. Only {current_available} left."), 400
+    if hw_doc["available"] < qty:
+        return jsonify(error="Not enough hardware"), 409
 
-    #adjust the available amount in the database
-    update_query = {
-        "$inc": {f"hardware.{hw_set}.available": -amount}
-    }
-    #ensure capacity
-    projects.update_one({"project_id": p_id}, update_query)
+    # atomic update (prevents race conditions)
+    result = hardware_collection.update_one(
+        {"name": hw, "available": {"$gte": qty}},
+        {
+            "$inc": {
+                "available": -qty,
+                "checked_out": qty
+            }
+        }
+    )
 
-    return jsonify(message=f"Successfully checked out {amount} of {hw_set}"), 200
+    if result.modified_count == 0:
+        return jsonify(error="Concurrent update failure"), 409
 
+    # update allocations
+    allocations_collection.update_one(
+        {"project_id": project_id},
+        {"$inc": {f"hardware.{hw}": qty}},
+        upsert=True
+    )
+
+    return jsonify(
+        message="Checked out",
+        projectID=project_id,
+        hardware=hw,
+        quantity=qty
+    ), 200
+
+
+# CHECKIN
 @app.route("/api/hardware/checkin", methods=["POST"])
 def checkin_hardware():
     data = request.json
-    p_id = data.get("projectID")
-    hw_set = data.get("hwSet")
-    amount = int(data.get("amount", 0))
+    project_id, hw, qty, err, code = parse_request(data)
+    if err:
+        return err, code
 
-    if amount <= 0:
-        return jsonify(error="Amount must be greater than 0"), 400
+    if qty <= 0:
+        return jsonify(error="Invalid quantity"), 400
 
-    project = projects.find_one({"project_id": p_id})
-    if not project:
-        return jsonify(error="Project not found"), 404
+    alloc_doc = allocations_collection.find_one({"project_id": project_id})
 
-    current_data = project.get("hardware", {}).get(hw_set, {"capacity": 100, "available": 100})
-    current_available = current_data.get("available")
-    capacity = current_data.get("capacity")
+    if not alloc_doc or alloc_doc.get("hardware", {}).get(hw, 0) < qty:
+        return jsonify(error="Returning more than allocated"), 400
 
-    if (current_available + amount) > capacity:
-        return jsonify(error=f"Cannot return more than capacity ({capacity})."), 400
+    # update allocation
+    allocations_collection.update_one(
+        {"project_id": project_id},
+        {"$inc": {f"hardware.{hw}": -qty}}
+    )
 
-    #increment available amount in the database
-    update_query = {
-        "$inc": {f"hardware.{hw_set}.available": amount}
-    }
-    projects.update_one({"project_id": p_id}, update_query)
+    # update hardware
+    hardware_collection.update_one(
+        {"name": hw},
+        {
+            "$inc": {
+                "available": qty,
+                "checked_out": -qty
+            }
+        }
+    )
 
-    return jsonify(message=f"Successfully checked in {amount} of {hw_set}"), 200
+    return jsonify(
+        message="Checked in",
+        projectID=project_id,
+        hardware=hw,
+        quantity=qty
+    ), 200
+
+
+# VIEW PROJECT ALLOCATIONS
+@app.route("/api/hardware/allocations/<project_id>", methods=["GET"])
+def get_allocations(project_id):
+    alloc = allocations_collection.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+
+    return jsonify(
+        projectID=project_id,
+        allocations=alloc.get("hardware", {}) if alloc else {}
+    ), 200
+
 if __name__ == "__main__":
     print("Running with mock database for Users and Projects")
     app.run(port=5000, debug=True)
