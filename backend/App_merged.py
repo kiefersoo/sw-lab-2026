@@ -100,8 +100,82 @@ def login_project():
 
 # RESOURCE MANAGEMENT
 
+@app.route("/api/hardware/<project_id>", methods=["GET"])
+def get_hardware(project_id):
+    """Fetches the current hardware status for a given project."""
+    project = projects.find_one({"project_id": project_id})
+    
+    if not project:
+        return jsonify(error="Project not found"), 404
+        
+    hardware = project.get("hardware", {
+        "HWSet1": {"capacity": 100, "available": 100},
+        "HWSet2": {"capacity": 100, "available": 100},
+        "HWSet3": {"capacity": 100, "available": 100},
+        "HWSet4": {"capacity": 100, "available": 100},
+        "HWSet5": {"capacity": 100, "available": 100}
+    })
+    
+    return jsonify(hardware=hardware), 200
 
+@app.route("/api/hardware/checkout", methods=["POST"])
+def checkout_hardware():
+    data = request.json
+    p_id = data.get("projectID")
+    hw_set = data.get("hwSet")
+    amount = int(data.get("amount", 0))
 
+    if amount <= 0:
+        return jsonify(error="Amount must be greater than 0"), 400
+
+    #check current availability
+    project = projects.find_one({"project_id": p_id})
+    if not project:
+        return jsonify(error="Project not found"), 404
+
+    #current available amount
+    current_available = project.get("hardware", {}).get(hw_set, {}).get("available", 100)
+
+    if amount > current_available:
+        return jsonify(error=f"Not enough {hw_set} available. Only {current_available} left."), 400
+
+    #adjust the available amount in the database
+    update_query = {
+        "$inc": {f"hardware.{hw_set}.available": -amount}
+    }
+    #ensure capacity
+    projects.update_one({"project_id": p_id}, update_query)
+
+    return jsonify(message=f"Successfully checked out {amount} of {hw_set}"), 200
+
+@app.route("/api/hardware/checkin", methods=["POST"])
+def checkin_hardware():
+    data = request.json
+    p_id = data.get("projectID")
+    hw_set = data.get("hwSet")
+    amount = int(data.get("amount", 0))
+
+    if amount <= 0:
+        return jsonify(error="Amount must be greater than 0"), 400
+
+    project = projects.find_one({"project_id": p_id})
+    if not project:
+        return jsonify(error="Project not found"), 404
+
+    current_data = project.get("hardware", {}).get(hw_set, {"capacity": 100, "available": 100})
+    current_available = current_data.get("available")
+    capacity = current_data.get("capacity")
+
+    if (current_available + amount) > capacity:
+        return jsonify(error=f"Cannot return more than capacity ({capacity})."), 400
+
+    #increment available amount in the database
+    update_query = {
+        "$inc": {f"hardware.{hw_set}.available": amount}
+    }
+    projects.update_one({"project_id": p_id}, update_query)
+
+    return jsonify(message=f"Successfully checked in {amount} of {hw_set}"), 200
 if __name__ == "__main__":
     print("Running with mock database for Users and Projects")
     app.run(port=5000, debug=True)

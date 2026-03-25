@@ -20,14 +20,85 @@ function HardwareManager() {
     const [reqHW4, setReqHW4] = useState(0);
     const [reqHW5, setReqHW5] = useState(0);
 
-    const handleCheckout = async (HWSet, amnt) => {
-        //flask here?
-        alert(`Checking out ${amnt} of HW${HWSet}`);
-    };
+    const fetchHardwareData = async () => {
+    try {
+      const response = await get(`/api/hardware/${projId}`);
+      if (response && response.hardware) {
+        setHW1(response.hardware.HWSet1);
+        setHW2(response.hardware.HWSet2);
+        setHW3(response.hardware.HWSet3);
+        setHW4(response.hardware.HWSet4);
+        setHW5(response.hardware.HWSet5);
+      }
+    } catch (error) {
+      console.error("Failed to fetch hardware data:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchHardwareData();
+  }, [projId]);
+
+  const handleCheckout = async (HWSet, amnt) => {
+    const parsedAmount = parseInt(amnt, 10);
+    if (!parsedAmount || parsedAmount <= 0) {
+      alert("Please enter a valid amount greater than 0.");
+      return;
+    }
+
+    try {
+      const response = await post('/api/hardware/checkout', {
+        projectID: projId,
+        hwSet: HWSet,
+        amount: parsedAmount
+      });
+      
+      if (response.error) {
+        alert(response.error);
+      } else {
+        // alert(response.message);
+        // Refresh the numbers on the screen
+        fetchHardwareData();
+        
+        // Clear the input fields
+        if (HWSet === 'HWSet1') setReqHW1(0);
+        if (HWSet === 'HWSet2') setReqHW2(0);
+      }
+    } catch (error) {
+        console.error("Checkout failed:", error);
+        alert("Checkout failed. Check console for details.");
+    }
+  };
     const handleReturn = async (HWSet, amnt) => {
-        //flask here?
-        alert(`Returning ${amnt} of HW${HWSet}`);
-    };
+    const parsedAmount = parseInt(amnt, 10);
+    if (!parsedAmount || parsedAmount <= 0) {
+      alert("Please enter a valid amount greater than 0.");
+      return;
+    }
+
+    try {
+      const response = await post('/api/hardware/checkin', {
+        projectID: projId,
+        hwSet: HWSet,
+        amount: parsedAmount
+      });
+      
+      if (response.error) {
+        alert(response.error);
+      } else {
+        // alert(response.message);
+        // Refresh the numbers on the screen
+        fetchHardwareData();
+        
+        // Clear the input fields
+        if (HWSet === 'HWSet1') setReqHW1(0);
+        if (HWSet === 'HWSet2') setReqHW2(0);
+      }
+    } catch (error) {
+        console.error("Return failed:", error);
+        alert("Return failed. Check console for details.");
+    }
+  };
 
 return (
     <Container className="py-4">
