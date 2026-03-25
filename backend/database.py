@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 
 def setup_database():
-    load_dotenv(r"backend\.env")    
+    load_dotenv(r"backend\.gitignore\.env")    
     cluster = MongoClient(os.getenv("MONGO_URI"))
     return cluster
 
@@ -37,9 +37,10 @@ def main():
     cluster = setup_database()
     hardware_db = access_hardware_db(cluster)
     hardware = access_hardware(hardware_db)
-    hardware.insert_one({"hardware_set": "hwset1", "capacity": 7, "availability": 5})
+    hardware.insert_one({"hardware_set": "HWSet1", "capacity": 100, "availability": 100})
+    hardware.insert_one({"hardware_set": "HWSet2", "capacity": 100, "availability": 100})
+
     
-        
 
 
 
