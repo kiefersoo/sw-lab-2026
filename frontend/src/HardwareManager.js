@@ -1,162 +1,129 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Card, Button, Form, Row, Col } from 'react-bootstrap';
+import { Container, Card, Button, Form, Row, Col, Alert } from 'react-bootstrap';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getUserId, clearAuth, post, get } from './api';
+import { getUserId, post, get } from './api';
 
 function HardwareManager() {
     const { projId } = useParams();
     const navigate = useNavigate();
-    const userId = getUserId();
-    
-    const [HW1, setHW1] = useState({ capacity: 100, available: 100});
-    const [HW2, setHW2] = useState({ capacity: 100, available: 100});
-    const [HW3, setHW3] = useState({ capacity: 100, available: 100});
-    const [HW4, setHW4] = useState({ capacity: 100, available: 100});
-    const [HW5, setHW5] = useState({ capacity: 100, available: 100});
+    //state for hardware list fetched from backend
+    const [hardwareList, setHardwareList] = useState([]);
 
-    const [reqHW1, setReqHW1] = useState(0);
-    const [reqHW2, setReqHW2] = useState(0);
-    const [reqHW3, setReqHW3] = useState(0);
-    const [reqHW4, setReqHW4] = useState(0);
-    const [reqHW5, setReqHW5] = useState(0);
+    //input field states keyed by hardware name for easy access
+    const [inputs, setInputs] = useState({});
+    const [error, setError] = useState(null);
 
     const fetchHardwareData = async () => {
-    try {
-      const response = await get(`/api/hardware/${projId}`);
-      if (response && response.hardware) {
-        setHW1(response.hardware.HWSet1);
-        setHW2(response.hardware.HWSet2);
-        setHW3(response.hardware.HWSet3);
-        setHW4(response.hardware.HWSet4);
-        setHW5(response.hardware.HWSet5);
-      }
-    } catch (error) {
-      console.error("Failed to fetch hardware data:", error);
-    }
-  };
+        try {
+            const response = await get('/api/hardware/status');
+            if (response && response.hardware) {
+                setHardwareList(response.hardware);
+                setError(null);
+            }
+        } catch (err) {
+            console.error("Failed to fetch hardware data:", err);
+            setError("Could not load hardware status.");
+        }
+    };
 
-  useEffect(() => {
-    fetchHardwareData();
-  }, [projId]);
-
-  const handleCheckout = async (HWSet, amnt) => {
-    const parsedAmount = parseInt(amnt, 10);
-    if (!parsedAmount || parsedAmount <= 0) {
-      alert("Please enter a valid amount greater than 0.");
-      return;
-    }
-
-    try {
-      const response = await post('/api/hardware/checkout', {
-        projectID: projId,
-        hwSet: HWSet,
-        amount: parsedAmount
-      });
-      
-      if (response.error) {
-        alert(response.error);
-      } else {
-        // alert(response.message);
-        // Refresh the numbers on the screen
+    useEffect(() => {
         fetchHardwareData();
+    }, [projId]);
+
+    const handleInputChange = (name, value) => {
+        setInputs(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleAction = async (actionType, hwName) => {
+        const amount = parseInt(inputs[hwName], 10);
         
-        // Clear the input fields
-        if (HWSet === 'HWSet1') setReqHW1(0);
-        if (HWSet === 'HWSet2') setReqHW2(0);
-      }
-    } catch (error) {
-        console.error("Checkout failed:", error);
-        alert("Checkout failed. Check console for details.");
-    }
-  };
-    const handleReturn = async (HWSet, amnt) => {
-    const parsedAmount = parseInt(amnt, 10);
-    if (!parsedAmount || parsedAmount <= 0) {
-      alert("Please enter a valid amount greater than 0.");
-      return;
-    }
+        if (!amount || amount <= 0) {
+            alert("Please enter a valid amount greater than 0.");
+            return;
+        }
 
-    try {
-      const response = await post('/api/hardware/checkin', {
-        projectID: projId,
-        hwSet: HWSet,
-        amount: parsedAmount
-      });
-      
-      if (response.error) {
-        alert(response.error);
-      } else {
-        // alert(response.message);
-        // Refresh the numbers on the screen
-        fetchHardwareData();
-        
-        // Clear the input fields
-        if (HWSet === 'HWSet1') setReqHW1(0);
-        if (HWSet === 'HWSet2') setReqHW2(0);
-      }
-    } catch (error) {
-        console.error("Return failed:", error);
-        alert("Return failed. Check console for details.");
-    }
-  };
+        const endpoint = actionType === 'checkout' ? '/api/hardware/checkout' : '/api/hardware/checkin';
 
-return (
-    <Container className="py-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Resource Management: {projId}</h2>
-        <Button variant="outline-primary" size="sm" onClick={() => navigate('/projects')}>
-          Back to Projects
-        </Button>
-      </div>
+        try {
+            const response = await post(endpoint, {
+                projectID: projId,
+                hardware: hwName, // Backend expects "hardware" key based on parse_request()
+                quantity: amount   // Backend expects "quantity" key
+            });
 
-      <Card className="shadow-sm">
-        <Card.Body>
-          <Row className="mb-3 fw-bold border-bottom pb-2">
-            <Col>Hardware Set</Col>
-            <Col>Capacity</Col>
-            <Col>Available</Col>
-            <Col>Request Amount</Col>
-            <Col>Actions</Col>
-          </Row>
+            if (response.error) {
+                alert(response.error);
+            } else {
+                // Refresh data and clear specific input
+                fetchHardwareData();
+                handleInputChange(hwName, ""); 
+            }
+        } catch (err) {
+            console.error(`${actionType} failed:`, err);
+            alert("Transaction failed. Check console.");
+        }
+    };
 
-          {/* HWSet1 Row */}
-          <Row className="align-items-center mb-3">
-            <Col>HWSet1</Col>
-            <Col>{HW1.capacity}</Col>
-            <Col>{HW1.available}</Col>
-            <Col>
-              <Form.Control 
-                type="number" min="0" value={reqHW1} 
-                onChange={(e) => setReqHW1(e.target.value)} 
-              />
-            </Col>
-            <Col className="d-flex gap-2">
-              <Button variant="success" size="sm" onClick={() => handleReturn('HWSet1', reqHW1)}>Check In</Button>
-              <Button variant="warning" size="sm" onClick={() => handleCheckout('HWSet1', reqHW1)}>Check Out</Button>
-            </Col>
-          </Row>
+    return (
+        <Container className="py-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h2>Project: {projId}</h2>
+                <Button variant="outline-primary" size="sm" onClick={() => navigate('/projects')}>
+                    Back to Projects
+                </Button>
+            </div>
 
-          {/* HWSet2 Row */}
-          <Row className="align-items-center">
-            <Col>HWSet2</Col>
-            <Col>{HW2.capacity}</Col>
-            <Col>{HW2.available}</Col>
-            <Col>
-              <Form.Control 
-                type="number" min="0" value={reqHW2} 
-                onChange={(e) => setReqHW2(e.target.value)} 
-              />
-            </Col>
-            <Col className="d-flex gap-2">
-              <Button variant="success" size="sm" onClick={() => handleReturn('HWSet2', reqHW2)}>Check In</Button>
-              <Button variant="warning" size="sm" onClick={() => handleCheckout('HWSet2', reqHW2)}>Check Out</Button>
-            </Col>
-          </Row>
+            {error && <Alert variant="danger">{error}</Alert>}
 
-        </Card.Body>
-      </Card>
-    </Container>
-  );
+            <Card className="shadow-sm">
+                <Card.Body>
+                    <Row className="mb-3 fw-bold border-bottom pb-2">
+                        <Col xs={3}>Hardware Set</Col>
+                        <Col>Capacity</Col>
+                        <Col>Available</Col>
+                        <Col xs={3}>Request Amount</Col>
+                        <Col xs={3}>Actions</Col>
+                    </Row>
+
+                    {hardwareList.map((hw) => (
+                        <Row key={hw.name} className="align-items-center mb-3 border-bottom pb-3">
+                            <Col xs={3}><strong>{hw.name}</strong></Col>
+                            <Col>{hw.capacity || (hw.available + hw.checked_out)}</Col>
+                            <Col>{hw.available}</Col>
+                            <Col xs={3}>
+                                <Form.Control 
+                                    type="number" 
+                                    placeholder="0"
+                                    value={inputs[hw.name] || ""} 
+                                    onChange={(e) => handleInputChange(hw.name, e.target.value)} 
+                                />
+                            </Col>
+                            <Col xs={3} className="d-flex gap-2">
+                                <Button 
+                                    variant="success" 
+                                    className="flex-grow-1"
+                                    onClick={() => handleAction('checkin', hw.name)}
+                                >
+                                    Check In
+                                </Button>
+                                <Button 
+                                    variant="warning" 
+                                    className="flex-grow-1"
+                                    onClick={() => handleAction('checkout', hw.name)}
+                                >
+                                    Check Out
+                                </Button>
+                            </Col>
+                        </Row>
+                    ))}
+
+                    {hardwareList.length === 0 && !error && (
+                        <div className="text-center py-3">No hardware sets found in database.</div>
+                    )}
+                </Card.Body>
+            </Card>
+        </Container>
+    );
 }
 
 export default HardwareManager;
