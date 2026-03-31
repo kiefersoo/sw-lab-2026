@@ -98,9 +98,175 @@ def login_project():
         projectID=p_id,
     ), 200
 
-# RESOURCE MANAGEMENT    
+
+# HARDWARE RESOURCE MANAGEMENT
+hardware_collection = db["hardware"]
+allocations_collection = db["allocations"]
 
 
+# HELPERS
+def parse_request(data):
+    project_id = data.get("projectID")
+    hw = data.get("hardware") or data.get("hwSet")
+    qty = data.get("quantity", data.get("amount", 0))
+
+    try:
+        qty = int(qty)
+    except:
+        return None, None, None, jsonify(error="Quantity must be integer"), 400
+
+    return project_id, hw, qty, None, None
+
+
+def validate_project(project_id):
+    if not project_id:
+        return jsonify(error="Project ID required"), 400
+
+    if not projects.find_one({"project_id": project_id}):
+        return jsonify(error="Project not found"), 404
+
+    return None
+
+
+# STATUS (ALL HARDWARE)
+@app.route("/api/hardware/status", methods=["GET"])
+def hardware_status():
+    hardware = list(hardware_collection.find({}, {"_id": 0}))
+    return jsonify(hardware=hardware), 200
+
+
+# REQUEST (CHECK ONLY)
+@app.route("/api/hardware/request", methods=["POST"])
+def request_hardware():
+    data = request.json
+    _, hw, qty, err, code = parse_request(data)
+    if err:
+        return err, code
+
+    hw_doc = hardware_collection.find_one({"name": hw})
+    if not hw_doc:
+        return jsonify(error="Hardware not found"), 404
+
+    if qty <= 0:
+        return jsonify(error="Invalid quantity"), 400
+
+    if hw_doc["available"] >= qty:
+        return jsonify(
+            message="Available",
+            requested=qty,
+            available=hw_doc["available"]
+        ), 200
+
+    return jsonify(
+        error="Not enough hardware",
+        available=hw_doc["available"]
+    ), 409
+
+
+# CHECKOUT
+@app.route("/api/hardware/checkout", methods=["POST"])
+def checkout_hardware():
+    data = request.json
+    project_id, hw, qty, err, code = parse_request(data)
+    if err:
+        return err, code
+
+    proj_check = validate_project(project_id)
+    if proj_check:
+        return proj_check
+
+    if qty <= 0:
+        return jsonify(error="Invalid quantity"), 400
+
+    hw_doc = hardware_collection.find_one({"name": hw})
+    if not hw_doc:
+        return jsonify(error="Hardware not found"), 404
+
+    if hw_doc["available"] < qty:
+        return jsonify(error="Not enough hardware"), 409
+
+    # atomic update (prevents race conditions)
+    result = hardware_collection.update_one(
+        {"name": hw, "available": {"$gte": qty}},
+        {
+            "$inc": {
+                "available": -qty,
+                "checked_out": qty
+            }
+        }
+    )
+
+    if result.modified_count == 0:
+        return jsonify(error="Concurrent update failure"), 409
+
+    # update allocations
+    allocations_collection.update_one(
+        {"project_id": project_id},
+        {"$inc": {f"hardware.{hw}": qty}},
+        upsert=True
+    )
+
+    return jsonify(
+        message="Checked out",
+        projectID=project_id,
+        hardware=hw,
+        quantity=qty
+    ), 200
+
+
+# CHECKIN
+@app.route("/api/hardware/checkin", methods=["POST"])
+def checkin_hardware():
+    data = request.json
+    project_id, hw, qty, err, code = parse_request(data)
+    if err:
+        return err, code
+
+    if qty <= 0:
+        return jsonify(error="Invalid quantity"), 400
+
+    alloc_doc = allocations_collection.find_one({"project_id": project_id})
+
+    if not alloc_doc or alloc_doc.get("hardware", {}).get(hw, 0) < qty:
+        return jsonify(error="Returning more than allocated"), 400
+
+    # update allocation
+    allocations_collection.update_one(
+        {"project_id": project_id},
+        {"$inc": {f"hardware.{hw}": -qty}}
+    )
+
+    # update hardware
+    hardware_collection.update_one(
+        {"name": hw},
+        {
+            "$inc": {
+                "available": qty,
+                "checked_out": -qty
+            }
+        }
+    )
+
+    return jsonify(
+        message="Checked in",
+        projectID=project_id,
+        hardware=hw,
+        quantity=qty
+    ), 200
+
+
+# VIEW PROJECT ALLOCATIONS
+@app.route("/api/hardware/allocations/<project_id>", methods=["GET"])
+def get_allocations(project_id):
+    alloc = allocations_collection.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+
+    return jsonify(
+        projectID=project_id,
+        allocations=alloc.get("hardware", {}) if alloc else {}
+    ), 200
 
 if __name__ == "__main__":
     print("Running with mock database for Users and Projects")
