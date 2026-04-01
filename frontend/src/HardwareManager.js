@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Card, Button, Form, Row, Col, Alert } from 'react-bootstrap';
+import { Container, Card, Button, Form, Row, Col, Alert, Badge } from 'react-bootstrap';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getUserId, post, get } from './api';
 
@@ -15,21 +15,22 @@ function HardwareManager() {
     const [allocations, setAllocations] = useState({});
 
     const fetchHardwareData = async () => {
-        try {
-            const response = await get('/api/hardware/status');
-            if (response && response.hardware) {
-                setHardwareList(response.hardware);
-            }
-            const allocResponse = await get(`/api/hardware/allocations/${projId}`);
-            if (allocResponse && allocResponse.allocations) {
-                setAllocations(allocResponse.allocations);
-            }
-            setError(null);
-        } catch (err) {
-            console.error("Failed to fetch hardware data:", err);
-            setError("Could not load hardware status.");
+    try {
+        const response = await get('/api/hardware/status');
+        // response is { ok, data, status }
+        if (response.ok && response.data.hardware) { 
+            setHardwareList(response.data.hardware);
         }
-    };
+        
+        const allocResponse = await get(`/api/hardware/allocations/${projId}`);
+        if (allocResponse.ok && allocResponse.data.allocations) {
+            setAllocations(allocResponse.data.allocations);
+        }
+        setError(null);
+    } catch (err) {
+        setError("Could not load hardware status.");
+    }
+};
 
     useEffect(() => {
         fetchHardwareData();
@@ -49,10 +50,10 @@ function HardwareManager() {
         if (actionType === 'request') {
              try {
                  const response = await post('/api/hardware/request', { projectID: projId, hardware: hwName, quantity: amount });
-                 if (response.error) {
-                     alert(`Cannot fulfill request: ${response.error}. Only ${response.available} available.`);
+                 if (response.data && response.data.error) {
+                     alert(`Cannot fulfill request: ${response.data.error}. Only ${response.data.available} available.`);
                  } else {
-                     alert(`Success: ${response.requested} units are available!`);
+                     alert(`Success: ${response.data.requested} units are available!`);
                  }
              } catch (err) { alert("Request check failed."); }
              return;
@@ -66,10 +67,10 @@ function HardwareManager() {
                 quantity: amount
             });
 
-            if (response.error) {
-                alert(response.error);
+            if (response.data && response.data.error) {
+                alert(response.data.error);
             } else {
-                fetchData(); // Refresh both tables
+                fetchHardwareData(); // Refresh both tables
                 handleInputChange(hwName, ""); 
             }
         } catch (err) {
