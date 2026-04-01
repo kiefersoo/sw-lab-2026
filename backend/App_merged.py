@@ -13,7 +13,6 @@ db = database.access_db(cluster)
 
 users = database.access_users(db)
 projects = database.access_projects(db)
-
 hardware_collection = database.access_hardware(db)
 allocations_collection = database.access_allocations(db)
 
@@ -29,10 +28,14 @@ def signup():
 
     if users.find_one({"username": userId}):
         return jsonify(error="User already exists"), 409
-    
+
     hashed_password = ph.hash(password)
 
-    users.insert_one({"username": userId, "password": hashed_password})
+    users.insert_one({
+        "username": userId,
+        "password": hashed_password
+    })
+
     return jsonify(message="User created"), 201
 
 
@@ -44,16 +47,16 @@ def signin():
 
     user = users.find_one({"username": userId})
     stored_password_hash = user["password"] if user else None
-    
+
     if not stored_password_hash:
         return jsonify(error="User not found"), 404
-    
+
     try:
         ph.verify(stored_password_hash, password)
     except VerifyMismatchError:
-        return jsonify(error="Incorrect password"), 401 
+        return jsonify(error="Incorrect password"), 401
     except InvalidHash:
-        return jsonify(error="Incorrect Hash"), 401
+        return jsonify(error="Invalid hash"), 401
 
     token = "demo-token-" + userId
     return jsonify(userId=userId, token=token), 200
@@ -72,8 +75,12 @@ def create_project():
     if projects.find_one({"project_id": p_id}):
         return jsonify(error="Project ID already exists"), 409
 
-    projects.insert_one({"project_id": p_id, "project_name": p_name, "project_description": p_desc})
-    
+    projects.insert_one({
+        "project_id": p_id,
+        "project_name": p_name,
+        "project_description": p_desc
+    })
+
     return jsonify(message="Project created successfully", projectID=p_id), 201
 
 
@@ -83,7 +90,7 @@ def login_project():
     p_id = data.get("projectID")
 
     project = projects.find_one({"project_id": p_id})
-    
+
     if not project:
         return jsonify(error="Project not found"), 404
 
@@ -129,23 +136,23 @@ def request_hardware():
     if err:
         return err, code
 
-    hw_doc = hardware_collection.find_one({"name": hw})
+    hw_doc = hardware_collection.find_one({"hardware_set": hw})
     if not hw_doc:
         return jsonify(error="Hardware not found"), 404
 
     if qty <= 0:
         return jsonify(error="Invalid quantity"), 400
 
-    if hw_doc["available"] >= qty:
+    if hw_doc["availability"] >= qty:
         return jsonify(
             message="Available",
             requested=qty,
-            available=hw_doc["available"]
+            available=hw_doc["availability"]
         ), 200
 
     return jsonify(
         error="Not enough hardware",
-        available=hw_doc["available"]
+        available=hw_doc["availability"]
     ), 409
 
 
@@ -163,16 +170,16 @@ def checkout_hardware():
     if qty <= 0:
         return jsonify(error="Invalid quantity"), 400
 
-    hw_doc = hardware_collection.find_one({"name": hw})
+    hw_doc = hardware_collection.find_one({"hardware_set": hw})
     if not hw_doc:
         return jsonify(error="Hardware not found"), 404
 
-    if hw_doc["available"] < qty:
+    if hw_doc["availability"] < qty:
         return jsonify(error="Not enough hardware"), 409
 
     result = hardware_collection.update_one(
-        {"name": hw, "available": {"$gte": qty}},
-        {"$inc": {"available": -qty, "checked_out": qty}}
+        {"hardware_set": hw, "availability": {"$gte": qty}},
+        {"$inc": {"availability": -qty}}
     )
 
     if result.modified_count == 0:
@@ -213,8 +220,8 @@ def checkin_hardware():
     )
 
     hardware_collection.update_one(
-        {"name": hw},
-        {"$inc": {"available": qty, "checked_out": -qty}}
+        {"hardware_set": hw},
+        {"$inc": {"availability": qty}}
     )
 
     return jsonify(

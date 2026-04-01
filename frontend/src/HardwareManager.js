@@ -108,17 +108,17 @@ function HardwareManager() {
                     </Row>
 
                     {hardwareList.map((hw) => (
-                        <Row key={hw.name} className="align-items-center mb-3 border-bottom pb-3">
-                            <Col xs={3}><strong>{hw.name}</strong></Col>
+                        <Row key={hw.hardware_set} className="align-items-center mb-3 border-bottom pb-3">
+                            <Col xs={3}><strong>{hw.hardware_set}</strong></Col>
                             <Col>{hw.capacity}</Col>
-                            <Col>{hw.available}</Col>
+                            <Col>{hw.availability}</Col>
 
                             <Col xs={3}>
                                 <Form.Control
                                     type="number"
                                     placeholder="0"
-                                    value={inputs[hw.name] || ""}
-                                    onChange={(e) => handleInputChange(hw.name, e.target.value)}
+                                    value={inputs[hw.hardware_set] || ""}
+                                    onChange={(e) => handleInputChange(hw.hardware_set, e.target.value)}
                                 />
                             </Col>
 
@@ -126,7 +126,7 @@ function HardwareManager() {
                                 <Button
                                     variant="success"
                                     className="flex-grow-1"
-                                    onClick={() => handleAction('checkin', hw.name)}
+                                    onClick={() => handleAction('checkin', hw.hardware_set)}
                                 >
                                     Check In
                                 </Button>
@@ -134,7 +134,7 @@ function HardwareManager() {
                                 <Button
                                     variant="warning"
                                     className="flex-grow-1"
-                                    onClick={() => handleAction('checkout', hw.name)}
+                                    onClick={() => handleAction('checkout', hw.hardware_set)}
                                 >
                                     Check Out
                                 </Button>
