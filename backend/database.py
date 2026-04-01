@@ -1,60 +1,61 @@
-import pymongo 
-from pymongo import MongoClient
 import os
+from pymongo import MongoClient
 from dotenv import load_dotenv
 
 
+# SETUP CONNECTION
 def setup_database():
-    load_dotenv(r"backend\.gitignore\.env")    
+    load_dotenv()
     cluster = MongoClient(os.getenv("MONGO_URI"))
     return cluster
 
+
+# MAIN DATABASE (single DB for everything)
 def access_db(cluster):
-   db = cluster["user_database"]
-   return db
+    return cluster["main_database"]
 
-def access_projects_db(cluster):
-    db = cluster["project_database"]
-    return db
 
+# COLLECTIONS
 def access_users(db):
-    users = db["users"]
-    return users
+    return db["users"]
+
 
 def access_projects(db):
-    projects = db["projects"]
-    return projects
+    return db["projects"]
 
-def access_hardware_db(cluster):
-    db = cluster["hardware_database"]
-    return db
 
 def access_hardware(db):
-    hardware = db["hardware_collection"]
-    return hardware
+    return db["hardware"]
 
+
+def access_allocations(db):
+    return db["allocations"]
+
+
+# OPTIONAL: INITIALIZE HARDWARE (run once)
+def init_hardware(db):
+    hardware = access_hardware(db)
+
+    hardware.update_one(
+        {"name": "HWSet1"},
+        {"$setOnInsert": {"capacity": 100, "available": 100, "checked_out": 0}},
+        upsert=True
+    )
+
+    hardware.update_one(
+        {"name": "HWSet2"},
+        {"$setOnInsert": {"capacity": 100, "available": 100, "checked_out": 0}},
+        upsert=True
+    )
+
+
+# RUN THIS FILE TO INITIALIZE DATA
 def main():
     cluster = setup_database()
-    hardware_db = access_hardware_db(cluster)
-    hardware = access_hardware(hardware_db)
-    hardware.insert_one({"hardware_set": "HWSet1", "capacity": 100, "availability": 100})
-    hardware.insert_one({"hardware_set": "HWSet2", "capacity": 100, "availability": 100})
-
-    
-
-
-
-
-
-
-
-
-
-
-
+    db = access_db(cluster)
+    init_hardware(db)
+    print("Database initialized.")
 
 
 if __name__ == "__main__":
     main()
-
-

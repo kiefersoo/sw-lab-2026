@@ -1,24 +1,25 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import database
-from pymongo import MongoClient
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHash
 
 app = Flask(__name__)
 CORS(app)
 ph = PasswordHasher()
+
 cluster = database.setup_database()
 db = database.access_db(cluster)
+
 users = database.access_users(db)
+projects = database.access_projects(db)
 
-project_db = database.access_projects_db(cluster)
-projects = database.access_projects(project_db)
+hardware_collection = database.access_hardware(db)
+allocations_collection = database.access_allocations(db)
 
-# USER AUTHENTICATION
+
 @app.route("/api/signup", methods=["POST"])
 def signup():
-    # TODO: replace with real database insertion
     data = request.json
     userId = data.get("userId")
     password = data.get("password")
@@ -34,14 +35,13 @@ def signup():
     users.insert_one({"username": userId, "password": hashed_password})
     return jsonify(message="User created"), 201
 
+
 @app.route("/api/signin", methods=["POST"])
 def signin():
     data = request.json
     userId = data.get("userId")
     password = data.get("password")
 
-
-    # TODO: replace with real database lookup
     user = users.find_one({"username": userId})
     stored_password_hash = user["password"] if user else None
     
@@ -53,12 +53,12 @@ def signin():
     except VerifyMismatchError:
         return jsonify(error="Incorrect password"), 401 
     except InvalidHash:
-        return jsonify(error= "Incorrect Hash"), 401
+        return jsonify(error="Incorrect Hash"), 401
 
     token = "demo-token-" + userId
     return jsonify(userId=userId, token=token), 200
 
-# PROJECT MANAGEMENT
+
 @app.route("/api/projects/create", methods=["POST"])
 def create_project():
     data = request.json
@@ -66,45 +66,33 @@ def create_project():
     p_name = data.get("name")
     p_desc = data.get("description")
 
-
     if not p_id or not p_name:
         return jsonify(error="Project ID and Name are required"), 400
 
     if projects.find_one({"project_id": p_id}):
         return jsonify(error="Project ID already exists"), 409
 
-    # Save to our mock project database
-    # TODO: replace with real database insertion
     projects.insert_one({"project_id": p_id, "project_name": p_name, "project_description": p_desc})
     
     return jsonify(message="Project created successfully", projectID=p_id), 201
 
+
 @app.route("/api/projects/login", methods=["POST"])
 def login_project():
-    """Allows a user to 'enter' a project by its ID"""
     data = request.json
     p_id = data.get("projectID")
 
-
-    # TODO: replace with real database lookup
     project = projects.find_one({"project_id": p_id})
     
     if not project:
         return jsonify(error="Project not found"), 404
 
-    # Return the project details to the user
     return jsonify(
         message="Logged into project",
         projectID=p_id,
     ), 200
 
 
-# HARDWARE RESOURCE MANAGEMENT
-hardware_collection = db["hardware"]
-allocations_collection = db["allocations"]
-
-
-# HELPERS
 def parse_request(data):
     project_id = data.get("projectID")
     hw = data.get("hardware") or data.get("hwSet")
@@ -128,14 +116,12 @@ def validate_project(project_id):
     return None
 
 
-# STATUS (ALL HARDWARE)
 @app.route("/api/hardware/status", methods=["GET"])
 def hardware_status():
     hardware = list(hardware_collection.find({}, {"_id": 0}))
     return jsonify(hardware=hardware), 200
 
 
-# REQUEST (CHECK ONLY)
 @app.route("/api/hardware/request", methods=["POST"])
 def request_hardware():
     data = request.json
@@ -163,7 +149,6 @@ def request_hardware():
     ), 409
 
 
-# CHECKOUT
 @app.route("/api/hardware/checkout", methods=["POST"])
 def checkout_hardware():
     data = request.json
@@ -185,21 +170,14 @@ def checkout_hardware():
     if hw_doc["available"] < qty:
         return jsonify(error="Not enough hardware"), 409
 
-    # atomic update (prevents race conditions)
     result = hardware_collection.update_one(
         {"name": hw, "available": {"$gte": qty}},
-        {
-            "$inc": {
-                "available": -qty,
-                "checked_out": qty
-            }
-        }
+        {"$inc": {"available": -qty, "checked_out": qty}}
     )
 
     if result.modified_count == 0:
         return jsonify(error="Concurrent update failure"), 409
 
-    # update allocations
     allocations_collection.update_one(
         {"project_id": project_id},
         {"$inc": {f"hardware.{hw}": qty}},
@@ -214,7 +192,6 @@ def checkout_hardware():
     ), 200
 
 
-# CHECKIN
 @app.route("/api/hardware/checkin", methods=["POST"])
 def checkin_hardware():
     data = request.json
@@ -230,21 +207,14 @@ def checkin_hardware():
     if not alloc_doc or alloc_doc.get("hardware", {}).get(hw, 0) < qty:
         return jsonify(error="Returning more than allocated"), 400
 
-    # update allocation
     allocations_collection.update_one(
         {"project_id": project_id},
         {"$inc": {f"hardware.{hw}": -qty}}
     )
 
-    # update hardware
     hardware_collection.update_one(
         {"name": hw},
-        {
-            "$inc": {
-                "available": qty,
-                "checked_out": -qty
-            }
-        }
+        {"$inc": {"available": qty, "checked_out": -qty}}
     )
 
     return jsonify(
@@ -255,7 +225,6 @@ def checkin_hardware():
     ), 200
 
 
-# VIEW PROJECT ALLOCATIONS
 @app.route("/api/hardware/allocations/<project_id>", methods=["GET"])
 def get_allocations(project_id):
     alloc = allocations_collection.find_one(
@@ -268,6 +237,7 @@ def get_allocations(project_id):
         allocations=alloc.get("hardware", {}) if alloc else {}
     ), 200
 
+
 if __name__ == "__main__":
-    print("Running with mock database for Users and Projects")
+    print("Running Flask server...")
     app.run(port=5000, debug=True)
