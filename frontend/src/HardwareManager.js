@@ -12,14 +12,19 @@ function HardwareManager() {
     //input field states keyed by hardware name for easy access
     const [inputs, setInputs] = useState({});
     const [error, setError] = useState(null);
+    const [allocations, setAllocations] = useState({});
 
     const fetchHardwareData = async () => {
         try {
             const response = await get('/api/hardware/status');
             if (response && response.hardware) {
                 setHardwareList(response.hardware);
-                setError(null);
             }
+            const allocResponse = await get(`/api/hardware/allocations/${projId}`);
+            if (allocResponse && allocResponse.allocations) {
+                setAllocations(allocResponse.allocations);
+            }
+            setError(null);
         } catch (err) {
             console.error("Failed to fetch hardware data:", err);
             setError("Could not load hardware status.");
@@ -36,26 +41,35 @@ function HardwareManager() {
 
     const handleAction = async (actionType, hwName) => {
         const amount = parseInt(inputs[hwName], 10);
-        
         if (!amount || amount <= 0) {
             alert("Please enter a valid amount greater than 0.");
             return;
         }
 
-        const endpoint = actionType === 'checkout' ? '/api/hardware/checkout' : '/api/hardware/checkin';
+        if (actionType === 'request') {
+             try {
+                 const response = await post('/api/hardware/request', { projectID: projId, hardware: hwName, quantity: amount });
+                 if (response.error) {
+                     alert(`Cannot fulfill request: ${response.error}. Only ${response.available} available.`);
+                 } else {
+                     alert(`Success: ${response.requested} units are available!`);
+                 }
+             } catch (err) { alert("Request check failed."); }
+             return;
+        }
 
+        const endpoint = actionType === 'checkout' ? '/api/hardware/checkout' : '/api/hardware/checkin';
         try {
             const response = await post(endpoint, {
                 projectID: projId,
-                hardware: hwName, // Backend expects "hardware" key based on parse_request()
-                quantity: amount   // Backend expects "quantity" key
+                hardware: hwName,
+                quantity: amount
             });
 
             if (response.error) {
                 alert(response.error);
             } else {
-                // Refresh data and clear specific input
-                fetchHardwareData();
+                fetchData(); // Refresh both tables
                 handleInputChange(hwName, ""); 
             }
         } catch (err) {
@@ -75,6 +89,21 @@ function HardwareManager() {
 
             {error && <Alert variant="danger">{error}</Alert>}
 
+            <Card className="shadow-sm mb-4">
+                <Card.Header>Current Project Allocations</Card.Header>
+                <Card.Body>
+                    {Object.keys(allocations).length === 0 ? (
+                        <span className="text-muted">No hardware currently checked out.</span>
+                    ) : (
+                        Object.entries(allocations).map(([hwName, qty]) => (
+                            <Badge bg="info" className="me-2 fs-6" key={hwName}>
+                                {hwName}: {qty} units
+                            </Badge>
+                        ))
+                    )}
+                </Card.Body>
+            </Card>
+            
             <Card className="shadow-sm">
                 <Card.Body>
                     <Row className="mb-3 fw-bold border-bottom pb-2">
