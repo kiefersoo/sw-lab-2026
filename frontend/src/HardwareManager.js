@@ -1,29 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Card, Button, Form, Row, Col, Alert } from 'react-bootstrap';
+import { Container, Card, Button, Form, Row, Col, Alert, Badge } from 'react-bootstrap';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getUserId, post, get } from './api';
+import { post, get } from './api';
 
 function HardwareManager() {
     const { projId } = useParams();
     const navigate = useNavigate();
-    //state for hardware list fetched from backend
-    const [hardwareList, setHardwareList] = useState([]);
 
-    //input field states keyed by hardware name for easy access
+    const [hardwareList, setHardwareList] = useState([]);
     const [inputs, setInputs] = useState({});
     const [error, setError] = useState(null);
     const [allocations, setAllocations] = useState({});
 
-    const fetchHardwareData = async () => {
+    const fetchData = async () => {
         try {
             const response = await get('/api/hardware/status');
             if (response && response.hardware) {
                 setHardwareList(response.hardware);
             }
+
             const allocResponse = await get(`/api/hardware/allocations/${projId}`);
             if (allocResponse && allocResponse.allocations) {
                 setAllocations(allocResponse.allocations);
             }
+
             setError(null);
         } catch (err) {
             console.error("Failed to fetch hardware data:", err);
@@ -32,7 +32,7 @@ function HardwareManager() {
     };
 
     useEffect(() => {
-        fetchHardwareData();
+        fetchData();
     }, [projId]);
 
     const handleInputChange = (name, value) => {
@@ -41,24 +41,17 @@ function HardwareManager() {
 
     const handleAction = async (actionType, hwName) => {
         const amount = parseInt(inputs[hwName], 10);
+
         if (!amount || amount <= 0) {
             alert("Please enter a valid amount greater than 0.");
             return;
         }
 
-        if (actionType === 'request') {
-             try {
-                 const response = await post('/api/hardware/request', { projectID: projId, hardware: hwName, quantity: amount });
-                 if (response.error) {
-                     alert(`Cannot fulfill request: ${response.error}. Only ${response.available} available.`);
-                 } else {
-                     alert(`Success: ${response.requested} units are available!`);
-                 }
-             } catch (err) { alert("Request check failed."); }
-             return;
-        }
+        const endpoint =
+            actionType === 'checkout'
+                ? '/api/hardware/checkout'
+                : '/api/hardware/checkin';
 
-        const endpoint = actionType === 'checkout' ? '/api/hardware/checkout' : '/api/hardware/checkin';
         try {
             const response = await post(endpoint, {
                 projectID: projId,
@@ -69,8 +62,8 @@ function HardwareManager() {
             if (response.error) {
                 alert(response.error);
             } else {
-                fetchData(); // Refresh both tables
-                handleInputChange(hwName, ""); 
+                fetchData();
+                handleInputChange(hwName, "");
             }
         } catch (err) {
             console.error(`${actionType} failed:`, err);
@@ -103,40 +96,43 @@ function HardwareManager() {
                     )}
                 </Card.Body>
             </Card>
-            
+
             <Card className="shadow-sm">
                 <Card.Body>
                     <Row className="mb-3 fw-bold border-bottom pb-2">
                         <Col xs={3}>Hardware Set</Col>
                         <Col>Capacity</Col>
                         <Col>Available</Col>
-                        <Col xs={3}>Request Amount</Col>
+                        <Col xs={3}>Amount</Col>
                         <Col xs={3}>Actions</Col>
                     </Row>
 
                     {hardwareList.map((hw) => (
                         <Row key={hw.name} className="align-items-center mb-3 border-bottom pb-3">
                             <Col xs={3}><strong>{hw.name}</strong></Col>
-                            <Col>{hw.capacity || (hw.available + hw.checked_out)}</Col>
+                            <Col>{hw.capacity}</Col>
                             <Col>{hw.available}</Col>
+
                             <Col xs={3}>
-                                <Form.Control 
-                                    type="number" 
+                                <Form.Control
+                                    type="number"
                                     placeholder="0"
-                                    value={inputs[hw.name] || ""} 
-                                    onChange={(e) => handleInputChange(hw.name, e.target.value)} 
+                                    value={inputs[hw.name] || ""}
+                                    onChange={(e) => handleInputChange(hw.name, e.target.value)}
                                 />
                             </Col>
+
                             <Col xs={3} className="d-flex gap-2">
-                                <Button 
-                                    variant="success" 
+                                <Button
+                                    variant="success"
                                     className="flex-grow-1"
                                     onClick={() => handleAction('checkin', hw.name)}
                                 >
                                     Check In
                                 </Button>
-                                <Button 
-                                    variant="warning" 
+
+                                <Button
+                                    variant="warning"
                                     className="flex-grow-1"
                                     onClick={() => handleAction('checkout', hw.name)}
                                 >
@@ -147,7 +143,9 @@ function HardwareManager() {
                     ))}
 
                     {hardwareList.length === 0 && !error && (
-                        <div className="text-center py-3">No hardware sets found in database.</div>
+                        <div className="text-center py-3">
+                            No hardware sets found in database.
+                        </div>
                     )}
                 </Card.Body>
             </Card>
