@@ -14,6 +14,10 @@ users = database.access_users(db)
 
 project_db = database.access_projects_db(cluster)
 projects = database.access_projects(project_db)
+hardware_db = database.access_hardware_db(cluster)
+hardware_collection = database.access_hardware(hardware_db)
+allocations_collection = hardware_db["allocations"]
+
 
 # USER AUTHENTICATION
 @app.route("/api/signup", methods=["POST"])
@@ -100,8 +104,6 @@ def login_project():
 
 
 # HARDWARE RESOURCE MANAGEMENT
-hardware_collection = db["hardware"]
-allocations_collection = db["allocations"]
 
 
 # HELPERS
@@ -143,23 +145,23 @@ def request_hardware():
     if err:
         return err, code
 
-    hw_doc = hardware_collection.find_one({"name": hw})
+    hw_doc = hardware_collection.find_one({"hardware_set": hw})
     if not hw_doc:
         return jsonify(error="Hardware not found"), 404
 
     if qty <= 0:
         return jsonify(error="Invalid quantity"), 400
 
-    if hw_doc["available"] >= qty:
+    if hw_doc["availability"] >= qty:
         return jsonify(
             message="Available",
             requested=qty,
-            available=hw_doc["available"]
+            available=hw_doc["availability"]
         ), 200
 
     return jsonify(
         error="Not enough hardware",
-        available=hw_doc["available"]
+        available=hw_doc["availability"]
     ), 409
 
 
@@ -178,19 +180,19 @@ def checkout_hardware():
     if qty <= 0:
         return jsonify(error="Invalid quantity"), 400
 
-    hw_doc = hardware_collection.find_one({"name": hw})
+    hw_doc = hardware_collection.find_one({"hardware_set": hw})
     if not hw_doc:
         return jsonify(error="Hardware not found"), 404
 
-    if hw_doc["available"] < qty:
+    if hw_doc["availability"] < qty:
         return jsonify(error="Not enough hardware"), 409
 
     # atomic update (prevents race conditions)
     result = hardware_collection.update_one(
-        {"name": hw, "available": {"$gte": qty}},
+        {"hardware_set": hw, "availability": {"$gte": qty}},
         {
             "$inc": {
-                "available": -qty,
+                "availability": -qty,
                 "checked_out": qty
             }
         }
@@ -238,10 +240,10 @@ def checkin_hardware():
 
     # update hardware
     hardware_collection.update_one(
-        {"name": hw},
+        {"hardware_set": hw},
         {
             "$inc": {
-                "available": qty,
+                "availability": qty,
                 "checked_out": -qty
             }
         }

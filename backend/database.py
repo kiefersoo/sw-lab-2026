@@ -37,15 +37,12 @@ def main():
     cluster = setup_database()
     hardware_db = access_hardware_db(cluster)
     hardware = access_hardware(hardware_db)
-    hardware.insert_one({"name": "HWSet1", "capacity": 100, "available": 100, "checked_out": 0})
-    hardware.insert_one({"name": "HWSet2", "capacity": 100, "available": 100, "checked_out": 0})
+    hardware.update_many(
+        {},
+        { "$set": { "checked_out": 0 } }
+    )
 
     
-
-
-
-
-
 
 
 

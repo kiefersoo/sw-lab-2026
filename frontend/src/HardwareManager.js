@@ -116,30 +116,30 @@ function HardwareManager() {
                     </Row>
 
                     {hardwareList.map((hw) => (
-                        <Row key={hw.name} className="align-items-center mb-3 border-bottom pb-3">
-                            <Col xs={3}><strong>{hw.name}</strong></Col>
-                            <Col>{hw.capacity || (hw.available + hw.checked_out)}</Col>
-                            <Col>{hw.available}</Col>
+                        <Row key={hw.hardware_set} className="align-items-center mb-3 border-bottom pb-3">
+                            <Col xs={3}><strong>{hw.hardware_set}</strong></Col>
+                            <Col>{hw.capacity || (hw.availability + hw.checked_out)}</Col>
+                            <Col>{hw.availability}</Col>
                             <Col xs={3}>
                                 <Form.Control 
                                     type="number" 
                                     placeholder="0"
-                                    value={inputs[hw.name] || ""} 
-                                    onChange={(e) => handleInputChange(hw.name, e.target.value)} 
+                                    value={inputs[hw.hardware_set] || ""} 
+                                    onChange={(e) => handleInputChange(hw.hardware_set, e.target.value)} 
                                 />
                             </Col>
                             <Col xs={3} className="d-flex gap-2">
                                 <Button 
                                     variant="success" 
                                     className="flex-grow-1"
-                                    onClick={() => handleAction('checkin', hw.name)}
+                                    onClick={() => handleAction('checkin', hw.hardware_set)}
                                 >
                                     Check In
                                 </Button>
                                 <Button 
                                     variant="warning" 
                                     className="flex-grow-1"
-                                    onClick={() => handleAction('checkout', hw.name)}
+                                    onClick={() => handleAction('checkout', hw.hardware_set)}
                                 >
                                     Check Out
                                 </Button>
