@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 
 def setup_database():
-    load_dotenv(r"backend\.gitignore\.env")    
+    load_dotenv(".gitignore/.env")
     cluster = MongoClient(os.getenv("MONGO_URI"))
     return cluster
 

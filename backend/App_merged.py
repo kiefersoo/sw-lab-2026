@@ -4,6 +4,9 @@ import database
 from pymongo import MongoClient
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHash
+import os
+from dotenv import load_dotenv
+
 
 app = Flask(__name__)
 CORS(app)
@@ -17,7 +20,8 @@ projects = database.access_projects(project_db)
 hardware_db = database.access_hardware_db(cluster)
 hardware_collection = database.access_hardware(hardware_db)
 allocations_collection = hardware_db["allocations"]
-
+load_dotenv(".gitignore/.env")
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 
 # USER AUTHENTICATION
 @app.route("/api/signup", methods=["POST"])
