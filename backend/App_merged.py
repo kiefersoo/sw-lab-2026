@@ -6,7 +6,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHash
 import os
 from dotenv import load_dotenv
-
+from flask import send_from_directory
 
 app = Flask(__name__)
 CORS(app)
@@ -273,6 +273,24 @@ def get_allocations(project_id):
         projectID=project_id,
         allocations=alloc.get("hardware", {}) if alloc else {}
     ), 200
+
+
+# ------------------------
+# CATCH-ALL ROUTE FOR REACT
+# ------------------------
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_react(path):
+    """
+    Serves the React frontend from the build/ folder.
+    - If the requested file exists, serve it.
+    - Otherwise, serve index.html (for React Router support)
+    """
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, "index.html")
+    
 
 if __name__ == "__main__":
     print("Running with mock database for Users and Projects")
