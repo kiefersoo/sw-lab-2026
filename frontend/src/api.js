@@ -3,7 +3,7 @@
  * Base URL and auth token are configured here for reuse across the app.
  */
 
-const BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const BASE_URL = process.env.REACT_APP_API_URL || "";
 
 const AUTH_TOKEN_KEY = "authToken";
 const USER_ID_KEY = "userId";
