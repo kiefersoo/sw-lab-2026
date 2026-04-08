@@ -275,17 +275,9 @@ def get_allocations(project_id):
     ), 200
 
 
-# ------------------------
-# CATCH-ALL ROUTE FOR REACT
-# ------------------------
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_react(path):
-    """
-    Serves the React frontend from the build/ folder.
-    - If the requested file exists, serve it.
-    - Otherwise, serve index.html (for React Router support)
-    """
     if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     else:
